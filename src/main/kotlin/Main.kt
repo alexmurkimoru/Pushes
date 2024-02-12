@@ -2,14 +2,10 @@
 fun main(args: Array<String>) {
     val systemApp: SystemApp = identifySystemParams()
     val pushesCount = readln().toInt()
-    val pushes = mutableListOf<Push?>()
     var pushIsFiltered = true
     var shownPushesCount = 0
     repeat(pushesCount) {
-        pushes.add(identifyPushParams())
-    }
-    for (i in pushes){
-        pushIsFiltered = systemApp.showPush(i)
+        pushIsFiltered = systemApp.showPush(identifyPushParams())
         if(!pushIsFiltered){
             shownPushesCount += 1
         }
