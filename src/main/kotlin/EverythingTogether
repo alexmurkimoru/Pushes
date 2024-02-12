@@ -1,0 +1,282 @@
+import kotlin.math.pow
+import kotlin.math.sqrt
+
+enum class Gender(val sign : String) {
+    MALE("m"),
+    FEMALE("f"),
+}
+
+enum class PushTypes(val type: String) {
+    LOCATION_PUSH("LocationPush"),
+    AGE_SPECIFIC_PUSH("AgeSpecificPush"),
+    TECH_PUSH("TechPush"),
+    LOCATION_AGE_PUSH("LocationAgePush"),
+    GENDER_AGE_PUSH("GenderAgePush"),
+    GENDER_PUSH("GenderPush")
+}
+
+interface FilterableByLocation {
+    fun isFilteredByLocation(systemApp: SystemApp, pushX: Float, pushY: Float, pushRadius: Int): Boolean {
+        return pushRadius < sqrt((systemApp.xCoord - pushX).pow(2) + (systemApp.yCoord - pushY).pow(2))
+    }
+}
+
+interface FilterableByAge {
+    fun isFilteredByAge(systemApp: SystemApp, pushAge: Int) = pushAge > systemApp.age
+}
+
+interface FilterableByOs {
+    fun isFilteredByOS(systemApp: SystemApp, pushOsVersion: Int) = pushOsVersion < systemApp.osVersion
+}
+
+interface FilterableByExpireDate {
+    fun isFilteredByExpireDate(systemApp: SystemApp, pushExpireDate: Long) = pushExpireDate < systemApp.time
+}
+
+interface FilterableByGender {
+    fun isFilteredByGender(systemApp: SystemApp, pushGender: Gender) = pushGender.sign != systemApp.gender.sign
+}
+
+class SystemApp(
+    val time: Long,
+    val age: Int,
+    val gender: Gender,
+    val osVersion: Int,
+    val xCoord: Float,
+    val yCoord: Float,
+) {
+    fun showPush(push: Push?): Boolean {
+        var pushIsFiltered = true
+        push?.let {
+            if (!push.isFilteredByApp(this)) {
+                println(push.text)
+                pushIsFiltered = false
+            }
+        }
+        return pushIsFiltered
+    }
+
+    companion object {
+        const val TIME = "time"
+        const val AGE = "age"
+        const val GENDER = "gender"
+        const val OS_VERSION = "os_version"
+        const val X_COORD = "x_coord"
+        const val Y_COORD = "y_coord"
+        const val RADIUS = "radius"
+        const val EXPIRE_DATE = "expiry_date"
+        const val TYPE = "type"
+        const val TEXT = "text"
+    }
+}
+
+abstract class Push(
+    protected val textParam: String,
+    protected val type: PushTypes
+) {
+    val text = textParam
+
+    abstract fun isFilteredByApp(systemApp: SystemApp): Boolean
+}
+
+class AgeSpecificPush(
+    textParam: String,
+    type: PushTypes,
+    private val age: Int,
+    private val expiryDate: Long,
+) : Push(textParam, type), FilterableByAge, FilterableByExpireDate {
+    override fun isFilteredByApp(systemApp: SystemApp) = isFilteredByAge(systemApp, age) || isFilteredByExpireDate(systemApp, expiryDate)
+}
+
+class GenderAgePush(
+    textParam: String,
+    type: PushTypes,
+    gender: Gender,
+    private val age: Int,
+) : GenderPush(textParam, type, gender), FilterableByAge {
+    override fun isFilteredByApp(systemApp: SystemApp) = isFilteredByAge(systemApp, age) || isFilteredByGender(systemApp, gender)
+}
+
+open class GenderPush(
+    textParam: String,
+    type: PushTypes,
+    protected val gender: Gender
+) : Push(textParam, type), FilterableByGender {
+    override fun isFilteredByApp(systemApp: SystemApp) = isFilteredByGender(systemApp, gender)
+}
+
+class LocationAgePush(
+    textParam: String,
+    type: PushTypes,
+    private val xCoord: Float,
+    private val yCoord: Float,
+    private val radius: Int,
+    private val age: Int,
+) : Push(textParam, type), FilterableByLocation, FilterableByAge{
+    override fun isFilteredByApp(systemApp: SystemApp) = isFilteredByLocation(systemApp, xCoord, yCoord, radius) || isFilteredByAge(systemApp, age)
+}
+
+class LocationPush(
+    textParam: String,
+    type: PushTypes,
+    private val xCoord: Float,
+    private val yCoord: Float,
+    private val radius: Int,
+    private val expiryDate: Long,
+) : Push(textParam, type), FilterableByLocation, FilterableByExpireDate {
+    override fun isFilteredByApp(systemApp: SystemApp) =
+        isFilteredByLocation(systemApp, xCoord, yCoord, radius) || isFilteredByExpireDate(systemApp, expiryDate)
+}
+
+class TechPush(
+    textParam: String,
+    type: PushTypes,
+    private val osVersion : Int,
+) : Push(textParam, type), FilterableByOs {
+    override fun isFilteredByApp(systemApp: SystemApp) = isFilteredByOS(systemApp, osVersion)
+}
+
+
+fun main(args: Array<String>) {
+    val systemApp: SystemApp = identifySystemParams()
+    val pushesCount = readln().toInt()
+    val pushes = mutableListOf<Push?>()
+    var pushIsFiltered = true
+    var shownPushesCount = 0
+    repeat(pushesCount) {
+        pushes.add(identifyPushParams())
+    }
+    for (i in pushes){
+        pushIsFiltered = systemApp.showPush(i)
+        if(!pushIsFiltered){
+            shownPushesCount += 1
+        }
+    }
+    if(shownPushesCount == 0){
+        println(-1)
+    }
+}
+
+fun identifySystemParams(): SystemApp {
+    var timeParam: Long = -1
+    var ageParam: Int = -1
+    var genderParam: Gender = Gender.MALE
+    var osVersionParam: Int = -1
+    var xCoordParam: Float = -1F
+    var yCoordParam: Float = -1F
+    repeat(6)
+    {
+        val str = readln().split(" ")
+        when (str[0]) {
+            SystemApp.TIME -> timeParam = str[1].toLong()
+            SystemApp.GENDER -> {
+                genderParam = if (str[1] == Gender.MALE.sign) {
+                    Gender.MALE
+                } else if (str[1] == Gender.FEMALE.sign) {
+                    Gender.FEMALE
+                } else {
+                    //throw IllegalArgumentException("Unexpected gender")
+                    Gender.FEMALE
+                }
+            }
+            SystemApp.AGE -> ageParam = str[1].toInt()
+            SystemApp.OS_VERSION -> osVersionParam = str[1].toInt()
+            SystemApp.X_COORD -> xCoordParam = str[1].toFloat()
+            SystemApp.Y_COORD -> yCoordParam = str[1].toFloat()
+        }
+    }
+    return SystemApp(timeParam, ageParam, genderParam, osVersionParam, xCoordParam, yCoordParam)
+}
+
+fun identifyPushParams(): Push? {
+    var push: Push? = null
+    val paramsCount = readln().toInt()
+    var typeParam = ""
+    var textParam = ""
+    var ageParam: Int = -1
+    var genderParam: Gender = Gender.MALE
+    var osVersionParam: Int = -1
+    var xCoordParam: Float = -1F
+    var yCoordParam: Float = -1F
+    var expireDateParam: Long = -1
+    var radiusParam: Int = -1
+    repeat(paramsCount){
+        val str = readln().split(" ")
+        when (str[0]){
+            SystemApp.TEXT -> textParam = str[1]
+            SystemApp.TYPE -> typeParam = str[1]
+            SystemApp.GENDER -> {
+                genderParam = if (str[1] == Gender.MALE.sign) {
+                    Gender.MALE
+                } else if (str[1] == Gender.FEMALE.sign) {
+                    Gender.FEMALE
+                } else {
+                    throw IllegalArgumentException("Unexpected gender")
+                }
+            }
+            SystemApp.AGE -> ageParam = str[1].toInt()
+            SystemApp.OS_VERSION -> osVersionParam = str[1].toInt()
+            SystemApp.X_COORD -> xCoordParam = str[1].toFloat()
+            SystemApp.Y_COORD -> yCoordParam = str[1].toFloat()
+            SystemApp.EXPIRE_DATE -> expireDateParam = str[1].toLong()
+            SystemApp.RADIUS -> radiusParam = str[1].toInt()
+            }
+        }
+    when(typeParam){
+        PushTypes.LOCATION_PUSH.type ->{
+            push = LocationPush(
+                textParam,
+                PushTypes.LOCATION_PUSH,
+                xCoordParam,
+                yCoordParam,
+                radiusParam,
+                expireDateParam
+                )
+        }
+        PushTypes.LOCATION_AGE_PUSH.type ->{
+            push = LocationAgePush(
+                textParam,
+                PushTypes.GENDER_AGE_PUSH,
+                xCoordParam,
+                yCoordParam,
+                radiusParam,
+                ageParam
+            )
+        }
+        PushTypes.GENDER_PUSH.type ->{
+            push = GenderPush(
+                textParam,
+                PushTypes.GENDER_PUSH,
+                genderParam
+            )
+        }
+        PushTypes.GENDER_AGE_PUSH.type ->{
+            push = GenderAgePush(
+                textParam,
+                PushTypes.GENDER_AGE_PUSH,
+                genderParam,
+                ageParam
+            )
+        }
+        PushTypes.AGE_SPECIFIC_PUSH.type ->{
+            push = AgeSpecificPush(
+                textParam,
+                PushTypes.AGE_SPECIFIC_PUSH,
+                ageParam,
+                expireDateParam
+            )
+        }
+       PushTypes.TECH_PUSH.type ->{
+            push = TechPush(
+                textParam,
+                PushTypes.TECH_PUSH,
+                osVersionParam
+            )
+        }
+        else -> throw IllegalArgumentException("Unexpected type")
+    }
+    return push
+}
+
+
+
